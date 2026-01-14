@@ -1,0 +1,57 @@
+{
+  "kind": "collectionType",
+  "collectionName": "exit_requests",
+  "info": {
+    "singularName": "exit-request",
+    "pluralName": "exit-requests",
+    "displayName": "Exit Request"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "exitRequestId": {
+      "type": "uid",
+      "required": true
+    },
+    "student": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "reasonType": {
+      "type": "string",
+      "required": true
+    },
+    "reasonDetails": {
+      "type": "text"
+    },
+    "status": {
+      "type": "enumeration",
+      "default": "PENDING",
+      "enum": [
+        "PENDING",
+        "APPROVED",
+        "REJECTED",
+        "EXITED"
+      ]
+    },
+    "expiresAt": {
+      "type": "datetime",
+      "required": true
+    },
+    "consumedAt": {
+      "type": "datetime"
+    },
+    "scannerId": {
+      "type": "string"
+    },
+    "qr_token": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::qr-token.qr-token",
+      "inversedBy": "exit_requests"
+    }
+  }
+}

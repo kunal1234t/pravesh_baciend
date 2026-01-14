@@ -1,0 +1,33 @@
+{
+  "kind": "collectionType",
+  "collectionName": "scan_logs",
+  "info": {
+    "singularName": "scan-log",
+    "pluralName": "scan-logs",
+    "displayName": "scan-log"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "exit_request": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::exit-request.exit-request"
+    },
+    "result": {
+      "type": "enumeration",
+      "enum": [
+        "verified",
+        "rejected"
+      ]
+    },
+    "scannedAt": {
+      "type": "datetime"
+    },
+    "reason": {
+      "type": "text"
+    }
+  }
+}

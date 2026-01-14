@@ -1,0 +1,40 @@
+{
+  "kind": "collectionType",
+  "collectionName": "qr_tokens",
+  "info": {
+    "singularName": "qr-token",
+    "pluralName": "qr-tokens",
+    "displayName": "qr-token"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "hash": {
+      "type": "text"
+    },
+    "expires_at": {
+      "type": "datetime"
+    },
+    "consumed": {
+      "type": "boolean"
+    },
+    "consumedAt": {
+      "type": "datetime"
+    },
+    "consumed_by": {
+      "type": "enumeration",
+      "enum": [
+        "gate",
+        "system"
+      ]
+    },
+    "exit_requests": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::exit-request.exit-request",
+      "mappedBy": "qr_token"
+    }
+  }
+}

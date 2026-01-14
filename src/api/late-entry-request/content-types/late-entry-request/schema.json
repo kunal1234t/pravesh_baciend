@@ -1,0 +1,42 @@
+{
+  "kind": "collectionType",
+  "collectionName": "late_entry_requests",
+  "info": {
+    "singularName": "late-entry-request",
+    "pluralName": "late-entry-requests",
+    "displayName": "late-entry-request"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "reason": {
+      "type": "text"
+    },
+    "expectedreturntime": {
+      "type": "datetime"
+    },
+    "stat": {
+      "type": "enumeration",
+      "enum": [
+        "pending ",
+        "approved ",
+        "rejected"
+      ]
+    },
+    "users_permissions_user": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "admin_user": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "admin::user"
+    },
+    "approvedAt": {
+      "type": "datetime"
+    }
+  }
+}

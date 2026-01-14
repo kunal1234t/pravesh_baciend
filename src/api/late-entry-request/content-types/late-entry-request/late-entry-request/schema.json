@@ -1,0 +1,76 @@
+{
+  "kind": "collectionType",
+  "collectionName": "late_entry_requests",
+  "info": {
+    "singularName": "late-entry-request",
+    "pluralName": "late-entry-requests",
+    "displayName": "Late Entry Request",
+    "description": "Student requests for late campus entry"
+  },
+  "options": {
+    "draftAndPublish": false,
+    "timestamps": true
+  },
+  "pluginOptions": {
+    "content-manager": {
+      "visible": true
+    },
+    "content-type-builder": {
+      "visible": true
+    }
+  },
+  "attributes": {
+    "student": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "required": true
+    },
+    "expectedEntry": {
+      "type": "datetime",
+      "required": true
+    },
+    "reason": {
+      "type": "text",
+      "required": true,
+      "maxLength": 1000
+    },
+    "supportingDocument": {
+      "type": "media",
+      "allowedTypes": ["files", "images"],
+      "multiple": false
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["PENDING", "APPROVED", "REJECTED", "CANCELLED", "EXPIRED"],
+      "default": "PENDING",
+      "required": true
+    },
+    "approvedBy": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "approvedAt": {
+      "type": "datetime"
+    },
+    "rejectionReason": {
+      "type": "text"
+    },
+    "emergencyContact": {
+      "type": "component",
+      "repeatable": false,
+      "component": "contact.emergency-contact"
+    },
+    "actualEntry": {
+      "type": "datetime"
+    },
+    "gateUsed": {
+      "type": "string",
+      "maxLength": 50
+    },
+    "remarks": {
+      "type": "text"
+    }
+  }
+}

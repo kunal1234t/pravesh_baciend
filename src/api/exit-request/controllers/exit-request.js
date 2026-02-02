@@ -4,24 +4,36 @@ const crypto = require('crypto');
 
 module.exports = {
   async create(ctx) {
+    console.log("🔥 EXIT REQUEST API HIT");
+
     const { user } = ctx.state;
+    const { reason } = ctx.request.body;
+
+    console.log("USER:", user);
+    console.log("BODY:", ctx.request.body);
 
     if (!user) {
       return ctx.unauthorized('Authentication required');
     }
 
-    // Fetch user with role
+    if (!reason) {
+      return ctx.badRequest('Reason is required');
+    }
+
+    // Fetch full user with role
     const fullUser = await strapi.entityService.findOne(
       'plugin::users-permissions.user',
       user.id,
       { populate: ['role'] }
     );
 
-    if (!fullUser || fullUser.role?.name !== 'STUDENT') {
+    console.log("ROLE:", fullUser.role.name);
+
+    if (!fullUser || fullUser.role.name !== 'Student') {
       return ctx.forbidden('Only students can create exit requests');
     }
 
-    // Check for active exit
+    // Check active exit
     const activeExit = await strapi.db
       .query('api::exit-request.exit-request')
       .findOne({
@@ -37,49 +49,36 @@ module.exports = {
 
     // Generate token
     const rawToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto
-      .createHash('sha256')
-      .update(rawToken)
-      .digest('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
 
-    const expiresAt = new Date(Date.now() + 60 * 1000); // 60 seconds
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
 
-    let exitRequest;
+    // ✅ CREATE EXIT REQUEST WITH REQUIRED FIELDS
+    const exitRequest = await strapi.entityService.create(
+      'api::exit-request.exit-request',
+      {
+        data: {
+          student: user.id,
+          reasonType: reason,              // REQUIRED
+          status: 'PENDING',
+          expiresAt: expiresAt,            // REQUIRED
+        },
+      }
+    );
 
-    try {
-      await strapi.db.transaction(async (trx) => {
-        // 1. Create exit request
-        exitRequest = await strapi.entityService.create(
-          'api::exit-request.exit-request',
-          {
-            data: {
-              student: user.id,
-              status: 'PENDING',
-            },
-            transaction: trx,
-          }
-        );
-
-        // 2. Create QR token
-        await strapi.entityService.create(
-          'api::qr-token.qr-token',
-          {
-            data: {
-              token_hash: tokenHash,
-              expires_at: expiresAt,
-              exit_request: exitRequest.id,
-            },
-            transaction: trx,
-          }
-        );
-      });
-    } catch (err) {
-      strapi.log.error('Exit request creation failed', err);
-      return ctx.internalServerError('Failed to create exit request');
-    }
+    // ✅ CREATE QR TOKEN
+    await strapi.entityService.create(
+      'api::qr-token.qr-token',
+      {
+        data: {
+          token_hash: tokenHash,
+          expires_at: expiresAt,
+          exit_request: exitRequest.id,
+        },
+      }
+    );
 
     return {
-      // @ts-ignore
       exitRequestId: exitRequest.id,
       qr: {
         t: rawToken,

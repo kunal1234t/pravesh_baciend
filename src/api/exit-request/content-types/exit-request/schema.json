@@ -11,10 +11,6 @@
   },
   "pluginOptions": {},
   "attributes": {
-    "exitRequestId": {
-      "type": "uid",
-      "required": true
-    },
     "student": {
       "type": "relation",
       "relation": "manyToOne",

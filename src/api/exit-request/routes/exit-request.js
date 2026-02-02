@@ -4,10 +4,12 @@ module.exports = {
   routes: [
     {
       method: 'POST',
-      path: '/exit-request/create',
+      path: '/exit-requests/create',
       handler: 'exit-request.create',
       config: {
-        auth: false,
+        auth: {
+          strategies: ['users-permissions'],
+        },
       },
     },
   ],

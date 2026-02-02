@@ -1,9 +1,14 @@
 'use strict';
 
-/**
- * qr-token router
- */
-
-const { createCoreRouter } = require('@strapi/strapi').factories;
-
-module.exports = createCoreRouter('api::qr-token.qr-token');
+module.exports = {
+  routes: [
+    {
+      method: 'POST',
+      path: '/qr-token/validate',
+      handler: 'qr-token.validate',
+      config: {
+        auth: false, // hardware does not use JWT
+      },
+    },
+  ],
+};

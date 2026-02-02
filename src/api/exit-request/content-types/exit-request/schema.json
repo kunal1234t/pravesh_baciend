@@ -42,12 +42,6 @@
     },
     "scannerId": {
       "type": "string"
-    },
-    "qr_token": {
-      "type": "relation",
-      "relation": "manyToOne",
-      "target": "api::qr-token.qr-token",
-      "inversedBy": "exit_requests"
     }
   }
 }

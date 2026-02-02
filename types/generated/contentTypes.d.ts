@@ -490,7 +490,6 @@ export interface ApiExitRequestExitRequest extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     publishedAt: Schema.Attribute.DateTime;
-    qr_token: Schema.Attribute.Relation<'manyToOne', 'api::qr-token.qr-token'>;
     reasonDetails: Schema.Attribute.Text;
     reasonType: Schema.Attribute.String & Schema.Attribute.Required;
     scannerId: Schema.Attribute.String;

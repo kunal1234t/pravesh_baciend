@@ -33,8 +33,7 @@
     "exit_requests": {
       "type": "relation",
       "relation": "oneToMany",
-      "target": "api::exit-request.exit-request",
-      "mappedBy": "qr_token"
+      "target": "api::exit-request.exit-request"
     }
   }
 }

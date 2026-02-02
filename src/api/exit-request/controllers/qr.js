@@ -21,7 +21,7 @@ module.exports = {
     const qrToken = await strapi.db
       .query('api::qr-token.qr-token')
       .findOne({
-        where: { token_hash: tokenHash },
+        where: { hash: tokenHash },
         populate: {
           exit_request: {
             populate: {

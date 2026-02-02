@@ -552,7 +552,7 @@ export interface ApiQrTokenQrToken extends Struct.CollectionTypeSchema {
     singularName: 'qr-token';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     consumed: Schema.Attribute.Boolean;

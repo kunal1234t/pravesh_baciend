@@ -7,9 +7,17 @@ module.exports = {
     try {
       console.log('🔥 QR VALIDATE API HIT');
 
-      const { token } = ctx.request.body;
+      let { token } = ctx.request.body;
+      console.log("🔥 RECEIVED RAW TOKEN:", JSON.stringify(token));
 
       if (!token) return ctx.badRequest('Token is required');
+
+      // Handle composite token format (token|timestamp|uuid...)
+      if (token.includes('|')) {
+        console.log("ℹ️ Parsing composite token...");
+        token = token.split('|')[0];
+        console.log("✅ Parsed Token:", token);
+      }
 
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
       console.log('HASH:', tokenHash);
@@ -27,7 +35,13 @@ module.exports = {
 
       console.log('QR TOKEN:', qrToken);
 
-      if (!qrToken) return ctx.notFound('Invalid QR token');
+      console.log('QR TOKEN:', qrToken);
+
+      if (!qrToken) {
+        const all = await strapi.db.query('api::qr-token.qr-token').findMany({ select: ['hash'] });
+        console.log('DEBUG: EXISTING HASHES:', all.map(t => t.hash));
+        return ctx.notFound('Invalid QR token');
+      }
       if (qrToken.consumed) return ctx.badRequest('QR already used');
       if (new Date(qrToken.expires_at) < new Date()) {
         return ctx.badRequest('QR expired');

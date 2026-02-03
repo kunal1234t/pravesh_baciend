@@ -12,5 +12,15 @@ module.exports = {
         },
       },
     },
+    {
+      method: 'POST',
+      path: '/exit-requests/entry', // ✅ New route for entry QR
+      handler: 'exit-request.createEntry',
+      config: {
+        auth: {
+          strategies: ['users-permissions'],
+        },
+      },
+    },
   ],
 };

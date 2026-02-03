@@ -23,14 +23,14 @@
     "reasonDetails": {
       "type": "text"
     },
-    "status": {
+    "statuse": {
       "type": "enumeration",
       "default": "PENDING",
       "enum": [
         "PENDING",
-        "APPROVED",
-        "REJECTED",
-        "EXITED"
+        "EXITED",
+        "ENTERED",
+        "REJECTED"
       ]
     },
     "expiresAt": {
@@ -38,6 +38,9 @@
       "required": true
     },
     "consumedAt": {
+      "type": "datetime"
+    },
+    "entryTime": {
       "type": "datetime"
     },
     "scannerId": {

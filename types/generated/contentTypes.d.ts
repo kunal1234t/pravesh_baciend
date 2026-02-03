@@ -482,6 +482,7 @@ export interface ApiExitRequestExitRequest extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    entryTime: Schema.Attribute.DateTime;
     expiresAt: Schema.Attribute.DateTime & Schema.Attribute.Required;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -493,8 +494,8 @@ export interface ApiExitRequestExitRequest extends Struct.CollectionTypeSchema {
     reasonDetails: Schema.Attribute.Text;
     reasonType: Schema.Attribute.String & Schema.Attribute.Required;
     scannerId: Schema.Attribute.String;
-    status: Schema.Attribute.Enumeration<
-      ['PENDING', 'APPROVED', 'REJECTED', 'EXITED']
+    statuse: Schema.Attribute.Enumeration<
+      ['PENDING', 'EXITED', 'ENTERED', 'REJECTED']
     > &
       Schema.Attribute.DefaultTo<'PENDING'>;
     student: Schema.Attribute.Relation<

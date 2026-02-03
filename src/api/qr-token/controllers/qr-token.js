@@ -43,9 +43,6 @@ module.exports = {
         return ctx.notFound('Invalid QR token');
       }
       if (qrToken.consumed) return ctx.badRequest('QR already used');
-      if (new Date(qrToken.expires_at) < new Date()) {
-        return ctx.badRequest('QR expired');
-      }
 
       if (!qrToken.exit_requests || qrToken.exit_requests.length === 0) {
         console.error('❌ exit_requests empty');
@@ -54,12 +51,34 @@ module.exports = {
 
       const exitRequest = qrToken.exit_requests[0];
 
+      if (new Date(qrToken.expires_at) < new Date()) {
+        console.log('❌ QR Expired. Updating status to REJECTED.');
+        await strapi.entityService.update(
+          'api::exit-request.exit-request',
+          exitRequest.id,
+          { data: { statuse: 'REJECTED' } }
+        );
+        return ctx.badRequest('QR expired');
+      }
+
       if (!exitRequest.student) {
         return ctx.internalServerError('Student relation missing');
       }
 
       const student = exitRequest.student;
-      const isExit = exitRequest.status === 'PENDING';
+
+      // ✅ DETECT ENTRY VS EXIT
+      // If statuse is PENDING, it's an EXIT attempt.
+      // If statuse is EXITED, it's an ENTRY attempt.
+      const isExit = exitRequest.statuse === 'PENDING';
+      const isEntry = exitRequest.statuse === 'EXITED';
+
+      console.log(`ℹ️ Token Type Detected: ${isExit ? 'EXIT' : 'ENTRY'} (Statuse: ${exitRequest.statuse})`);
+
+      if (!isExit && !isEntry) {
+        // Edge case: Maybe already ENTERED or REJECTED
+        return ctx.badRequest(`Invalid Exit Request statuse: ${exitRequest.statuse}`);
+      }
 
       await strapi.entityService.update(
         'api::qr-token.qr-token',
@@ -73,15 +92,42 @@ module.exports = {
         }
       );
 
-      await strapi.entityService.update(
-        'api::exit-request.exit-request',
-        exitRequest.id,
-        {
-          data: {
-            status: isExit ? 'EXITED' : 'RETURNED',
-          },
-        }
-      );
+      console.log(`🔄 Attempting to update ExitRequest [${exitRequest.id}] status...`);
+
+      const updateData = {};
+
+      if (isExit) {
+        // EXIT FLOW
+        updateData.statuse = 'EXITED'; // User successfully exited
+      } else {
+        // ENTRY FLOW
+        updateData.statuse = 'ENTERED'; // User successfully entered
+        updateData.entryTime = new Date(); // USER REQUIREMENT
+      }
+
+      try {
+        const updateResult = await strapi.entityService.update(
+          'api::exit-request.exit-request',
+          exitRequest.id,
+          {
+            data: updateData,
+          }
+        );
+        console.log('✅ Update Result:', JSON.stringify(updateResult, null, 2));
+      } catch (updateError) {
+        console.error('❌ FAILED to update ExitRequest:', updateError);
+      }
+
+      // Emit event for frontend
+      if (strapi.io) {
+        console.log('📢 Emitting qr-validated for token:', token);
+        strapi.io.emit('qr-validated', {
+          token: token,
+          allowed: true,
+          action: isExit ? 'exit' : 'entry',
+          timestamp: new Date().toISOString()
+        });
+      }
 
       return {
         allowed: true,

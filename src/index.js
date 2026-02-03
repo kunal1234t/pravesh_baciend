@@ -1,5 +1,7 @@
 'use strict';
 
+const { Server } = require('socket.io');
+
 module.exports = {
   /**
    * An asynchronous register function that runs before
@@ -7,7 +9,7 @@ module.exports = {
    *
    * This gives you an opportunity to extend code.
    */
-  register(/*{ strapi }*/) {},
+  register(/*{ strapi }*/) { },
 
   /**
    * An asynchronous bootstrap function that runs before
@@ -16,5 +18,18 @@ module.exports = {
    * This gives you an opportunity to set up your data model,
    * run jobs, or perform some special logic.
    */
-  bootstrap(/*{ strapi }*/) {},
+  bootstrap({ strapi }) {
+    const io = new Server(strapi.server.httpServer, {
+      cors: {
+        origin: "*",
+        methods: ["GET", "POST"],
+      },
+    });
+
+    io.on('connection', (socket) => {
+      console.log('socket connected', socket.id);
+    });
+
+    strapi.io = io;
+  },
 };

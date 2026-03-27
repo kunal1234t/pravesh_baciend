@@ -512,19 +512,25 @@ export interface ApiLateEntryRequestLateEntryRequest
   extends Struct.CollectionTypeSchema {
   collectionName: 'late_entry_requests';
   info: {
-    displayName: 'late-entry-request';
+    displayName: 'Late Entry Request';
     pluralName: 'late-entry-requests';
     singularName: 'late-entry-request';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
-    admin_user: Schema.Attribute.Relation<'oneToOne', 'admin::user'>;
     approvedAt: Schema.Attribute.DateTime;
+    approvedBy: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    destination: Schema.Attribute.String;
+    emergencyContact: Schema.Attribute.String;
+    enteredAt: Schema.Attribute.DateTime;
     expectedreturntime: Schema.Attribute.DateTime;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -534,12 +540,15 @@ export interface ApiLateEntryRequestLateEntryRequest
       Schema.Attribute.Private;
     publishedAt: Schema.Attribute.DateTime;
     reason: Schema.Attribute.Text;
-    stat: Schema.Attribute.Enumeration<['pending ', 'approved ', 'rejected']>;
+    stat: Schema.Attribute.Enumeration<
+      ['pending', 'approved', 'rejected', 'entered']
+    > &
+      Schema.Attribute.DefaultTo<'pending'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     users_permissions_user: Schema.Attribute.Relation<
-      'oneToOne',
+      'manyToOne',
       'plugin::users-permissions.user'
     >;
   };
@@ -631,6 +640,10 @@ export interface ApiVisitorVisitor extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    guard: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -638,7 +651,7 @@ export interface ApiVisitorVisitor extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     name: Schema.Attribute.String;
-    phone: Schema.Attribute.Integer;
+    phone: Schema.Attribute.String;
     photo: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios',
       true
@@ -1119,6 +1132,7 @@ export interface PluginUsersPermissionsUser
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    deviceID: Schema.Attribute.String;
     email: Schema.Attribute.Email &
       Schema.Attribute.Required &
       Schema.Attribute.SetMinMaxLength<{

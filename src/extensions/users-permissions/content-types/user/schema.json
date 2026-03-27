@@ -73,6 +73,10 @@
       "relation": "oneToMany",
       "target": "api::exit-request.exit-request",
       "mappedBy": "users_permissions_user"
+    },
+    "deviceID": {
+      "type": "string",
+      "configurable": false
     }
   }
 }

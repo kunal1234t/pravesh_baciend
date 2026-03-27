@@ -8,6 +8,24 @@ module.exports = {
     },
     {
       method: 'GET',
+      path: '/visitors/status/:id',
+      handler: 'visitor.getStatus',
+      config: { auth: false },
+    },
+    {
+      method: 'GET',
+      path: '/visitors/guard/mine',
+      handler: 'visitor.guardMine',
+      config: { auth: false },
+    },
+    {
+      method: 'GET',
+      path: '/visitors/staff',
+      handler: 'visitor.getStaff',
+      config: { auth: false },
+    },
+    {
+      method: 'GET',
       path: '/visitors/pending',
       handler: 'visitor.pendingForTeacher',
       config: { auth: false },

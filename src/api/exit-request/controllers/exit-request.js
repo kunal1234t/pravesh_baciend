@@ -3,6 +3,50 @@
 const crypto = require('crypto');
 
 module.exports = {
+  // Warden: list all EXITED exit-requests (students currently outside)
+  async listExited(ctx) {
+    try {
+      // Manually verify JWT since route uses auth: false
+      const authHeader = ctx.request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return ctx.unauthorized('No token provided');
+      }
+
+      const token = authHeader.replace('Bearer ', '');
+      const jwtService = strapi.plugin('users-permissions').service('jwt');
+      let payload;
+      try {
+        payload = await jwtService.verify(token);
+      } catch (e) {
+        return ctx.unauthorized('Invalid or expired token');
+      }
+
+      const fullUser = await strapi.entityService.findOne(
+        'plugin::users-permissions.user',
+        payload.id,
+        { populate: ['role'] }
+      );
+
+      if (!fullUser || fullUser.role.name !== 'Warden') {
+        return ctx.forbidden('Only wardens can view this list');
+      }
+
+      const exitedRequests = await strapi.entityService.findMany(
+        'api::exit-request.exit-request',
+        {
+          filters: { statuse: 'EXITED' },
+          populate: ['student'],
+          sort: { createdAt: 'desc' },
+        }
+      );
+
+      return ctx.send({ data: exitedRequests });
+    } catch (err) {
+      console.error('❌ listExited ERROR:', err);
+      return ctx.internalServerError('Failed to fetch exited students');
+    }
+  },
+
   async create(ctx) {
     try {
       console.log("🔥 EXIT REQUEST API HIT");

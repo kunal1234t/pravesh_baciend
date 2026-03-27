@@ -15,7 +15,7 @@
       "type": "string"
     },
     "phone": {
-      "type": "integer"
+      "type": "string"
     },
     "purpose": {
       "type": "text"
@@ -33,6 +33,11 @@
     "users_permissions_user": {
       "type": "relation",
       "relation": "oneToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "guard": {
+      "type": "relation",
+      "relation": "manyToOne",
       "target": "plugin::users-permissions.user"
     },
     "stat": {

@@ -1,28 +1,53 @@
 'use strict';
 
 module.exports = (plugin) => {
-  console.log('🔥 USERS-PERMISSIONS OVERRIDE LOADED');
+  console.log('🔥 USERS-PERMISSIONS OVERRIDE LOADED (Strapi v5)');
 
-  plugin.controllers.user.me = async (ctx) => {
-    console.log('🔥 CUSTOM /users/me HIT');
+  const originalCallback = plugin.controllers.auth.callback;
 
-    const user = ctx.state.user;
+  plugin.controllers.auth.callback = async (ctx) => {
+    console.log('🔥 CUSTOM LOGIN HIT');
+    console.log('📥 BODY:', ctx.request.body);
 
-    if (!user) {
-      return ctx.unauthorized();
+    const { deviceID } = ctx.request.body;
+
+    // call original login
+    await originalCallback(ctx);
+
+    // If the original callback already sent an error, stop here
+    if (ctx.response.status !== 200 || !ctx.response.body) {
+      return;
     }
 
-    const fullUser = await strapi.entityService.findOne(
-      'plugin::users-permissions.user',
-      user.id,
-      {
-        populate: { role: true },
+    const user = ctx.response.body.user;
+    if (!user) {
+      return;
+    }
+
+    // Only enforce device check if deviceID was provided
+    if (deviceID) {
+      if (user.deviceID && user.deviceID !== deviceID) {
+        console.log('❌ Login blocked: different device');
+        ctx.status = 403;
+        ctx.body = { error: { message: 'User already logged in on another device' } };
+        return;
       }
-    );
 
-    console.log('🔥 USER WITH ROLE:', fullUser);
+      // save deviceID if first login
+      if (!user.deviceID) {
+        await strapi.entityService.update(
+          'plugin::users-permissions.user',
+          user.id,
+          {
+            data: { deviceID },
+          }
+        );
+      }
 
-    return fullUser;
+      console.log('✅ LOGIN SUCCESSFUL for device:', deviceID);
+    } else {
+      console.log('✅ LOGIN SUCCESSFUL (no deviceID check - web mode)');
+    }
   };
 
   return plugin;

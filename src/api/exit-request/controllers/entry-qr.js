@@ -1,8 +1,22 @@
 'use strict';
 
 const crypto = require('crypto');
+const nightCompliance = require('../../night-compliance');
+
+const resolveValidUntil = (lateEntry) => {
+  if (lateEntry?.validUntil) {
+    return new Date(lateEntry.validUntil);
+  }
+  if (lateEntry?.expectedreturntime) {
+    return new Date(new Date(lateEntry.expectedreturntime).getTime() + 60 * 60 * 1000);
+  }
+  return null;
+};
 
 module.exports = {
+    /**
+     * @param {any} ctx
+     */
     async createEntryQR(ctx) {
         try {
             console.log("🔥 CREATE ENTRY QR API HIT (Custom Controller)");
@@ -13,6 +27,9 @@ module.exports = {
             if (!user) {
                 return ctx.unauthorized('Authentication required');
             }
+
+            const now = new Date();
+            const isNightWindow = nightCompliance.isNightWindow();
 
             // 1️⃣ Check for active "EXITED" request
             // We only allow entry if they have actually EXITED.
@@ -36,34 +53,81 @@ module.exports = {
 
             console.log(`✅ Found active exit: ${activeExit.id} (Status: ${activeExit.statuse})`);
 
-            // 2️⃣ Generate ENTRY QR Token
-            const rawToken = crypto.randomBytes(32).toString('hex');
-            const tokenHash = crypto
-                .createHash('sha256')
-                .update(rawToken)
-                .digest('hex');
+            if (isNightWindow) {
+                const lateEntry = await strapi.db
+                    .query('api::late-entry-request.late-entry-request')
+                    .findOne({
+                        where: {
+                            users_permissions_user: user.id,
+                            stat: 'approved',
+                        },
+                        orderBy: { createdAt: 'desc' },
+                    });
 
-            const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+                if (!lateEntry) {
+                    return ctx.forbidden('Late night approval required to enter the campus.');
+                }
 
-            // 3️⃣ Save to qr-token table linked to same exit-request
-            const qrToken = await strapi.entityService.create('api::qr-token.qr-token', {
+                const validUntil = resolveValidUntil(lateEntry);
+                const adminOverride = lateEntry.adminOverride === true;
+
+                if (!adminOverride && (!validUntil || now > validUntil)) {
+                    return ctx.forbidden('Late night approval has expired.');
+                }
+            }
+
+            // 2️⃣ Reuse existing active ENTRY token if present
+            const existingToken = await strapi.db
+                .query('api::qr-token.qr-token')
+                .findOne({
+                    where: {
+                        exit_requests: activeExit.id,
+                        consumed: false,
+                        expires_at: { $gt: now },
+                    },
+                    orderBy: { createdAt: 'desc' },
+                });
+
+            if (existingToken) {
+                return {
+                    exitRequestId: activeExit.id,
+                    qr: {
+                        t: existingToken.token,
+                        e: new Date(existingToken.expires_at).toISOString(),
+                    },
+                };
+            }
+
+            // 3️⃣ Generate ENTRY QR Token
+            const base62 = require('../../qr-token/base62');
+            const qrToken = base62.generateToken(); // Generate 12-char token like exit flow
+            
+            const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
+
+            // 4️⃣ Save to qr-token table linked to same exit-request
+            // Hash the token for verification
+            const tokenHash = crypto.createHash('sha256').update(qrToken).digest('hex');
+            
+            const createdQRToken = await strapi.entityService.create('api::qr-token.qr-token', {
                 data: {
-                    hash: tokenHash,
+                    token: qrToken,
+                    hash: tokenHash,  // Store hash for verification
                     expires_at: expiresAt,
                     consumed: false,
-                    exit_requests: [activeExit.id],
+                    exit_requests: activeExit.id,  // Single ID, not array (manyToOne)
                 },
             });
 
-            console.log(`✅ ENTRY QR TOKEN CREATED: ${qrToken.id} for Exit Request ${activeExit.id}`);
+            console.log(`✅ ENTRY QR TOKEN CREATED: ${createdQRToken.id} with token: ${qrToken}`);
 
-            // 4️⃣ Return to Frontend
+            // 5️⃣ Return to Frontend (simplified format: just token, like exit QR)
+            // This makes entry QR easier to scan (shorter string)
             return {
                 exitRequestId: activeExit.id,
                 qr: {
-                    t: rawToken,
-                    e: Math.floor(expiresAt.getTime() / 1000),
-                },
+                    t: qrToken,  // 't' for token only (simplified)
+                    e: expiresAt.toISOString()  // 'e' for expiration (for timer)
+                }
             };
 
         } catch (err) {

@@ -24,31 +24,49 @@ module.exports = (plugin) => {
       return;
     }
 
-    // Only enforce device check if deviceID was provided
-    if (deviceID) {
-      if (user.deviceID && user.deviceID !== deviceID) {
+    const fullUser = await strapi.entityService.findOne('plugin::users-permissions.user', user.id);
+    if (!fullUser) return;
+
+    // 1. Enforce deviceID check even if missing from request (if bound in DB)
+    if (fullUser.deviceID) {
+      if (!deviceID || fullUser.deviceID !== deviceID) {
         console.log('❌ Login blocked: different device');
         ctx.status = 403;
         ctx.body = { error: { message: 'User already logged in on another device' } };
         return;
       }
+    }
+    // 2. Auto-bind deviceID if not bound yet
+    else if (deviceID) {
+      // Check if this device is ALREADY bound to ANY other account
+      const existingDeviceUser = await strapi.db.query('plugin::users-permissions.user').findOne({
+        where: { deviceID },
+      });
 
-      // save deviceID if first login
-      if (!user.deviceID) {
-        await strapi.entityService.update(
-          'plugin::users-permissions.user',
-          user.id,
-          {
-            data: { deviceID },
-          }
-        );
+      if (existingDeviceUser && existingDeviceUser.id !== fullUser.id) {
+        console.log('❌ Login blocked: device already bound to another user:', deviceID);
+        ctx.status = 403;
+        ctx.body = { error: { message: 'This device is already bound to another account.' } };
+        return;
       }
 
-      console.log('✅ LOGIN SUCCESSFUL for device:', deviceID);
+      await strapi.entityService.update(
+        'plugin::users-permissions.user',
+        fullUser.id,
+        {
+          data: { deviceID },
+        }
+      );
+      console.log('✅ Device auto-bound:', deviceID);
     } else {
-      console.log('✅ LOGIN SUCCESSFUL (no deviceID check - web mode)');
+      console.log('⚠️ LOGIN SUCCESSFUL (no deviceID provided - web mode or desktop)');
     }
+
+    // Update response to include deviceID for frontend state
+    ctx.response.body.user.deviceID = deviceID || fullUser.deviceID;
+    if (deviceID) console.log('✅ LOGIN SUCCESSFUL for device:', deviceID);
   };
 
   return plugin;
 };
+

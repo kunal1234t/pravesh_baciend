@@ -45,8 +45,29 @@
       "enum": [
         "pending",
         "approved",
-        "rejected"
+        "rejected",
+        "pre_approved",
+        "checked_in",
+        "exited"
       ]
+    },
+    "expectedAt": {
+      "type": "datetime"
+    },
+    "isInside": {
+      "type": "boolean",
+      "default": false
+    },
+    "checkedInAt": {
+      "type": "datetime"
+    },
+    "checkedOutAt": {
+      "type": "datetime"
+    },
+    "scheduledBy": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
     },
     "admin_user": {
       "type": "relation",

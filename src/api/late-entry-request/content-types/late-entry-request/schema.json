@@ -23,6 +23,13 @@
     "expectedreturntime": {
       "type": "datetime"
     },
+    "validUntil": {
+      "type": "datetime"
+    },
+    "adminOverride": {
+      "type": "boolean",
+      "default": false
+    },
     "stat": {
       "type": "enumeration",
       "enum": ["pending", "approved", "rejected", "entered"],
@@ -40,6 +47,11 @@
     },
     "approvedAt": {
       "type": "datetime"
+    },
+    "qrToken": {
+      "type": "string",
+      "minLength": 12,
+      "maxLength": 12
     },
     "enteredAt": {
       "type": "datetime"

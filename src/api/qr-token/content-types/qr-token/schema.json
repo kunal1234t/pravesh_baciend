@@ -11,14 +11,23 @@
   },
   "pluginOptions": {},
   "attributes": {
+    "token": {
+      "type": "string",
+      "unique": true,
+      "required": true,
+      "maxLength": 12,
+      "minLength": 10
+    },
     "hash": {
       "type": "text"
     },
     "expires_at": {
-      "type": "datetime"
+      "type": "datetime",
+      "required": true
     },
     "consumed": {
-      "type": "boolean"
+      "type": "boolean",
+      "default": false
     },
     "consumedAt": {
       "type": "datetime"
@@ -32,7 +41,7 @@
     },
     "exit_requests": {
       "type": "relation",
-      "relation": "oneToMany",
+      "relation": "manyToOne",
       "target": "api::exit-request.exit-request"
     }
   }

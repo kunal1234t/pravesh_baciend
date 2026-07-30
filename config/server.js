@@ -7,4 +7,8 @@ module.exports = ({ env }) => ({
   webhooks: {
     populateRelations: env.bool('WEBHOOKS_POPULATE_RELATIONS', false),
   },
+  // ✅ Enable cron jobs for async cleanup
+  cron: {
+    enabled: env.bool('CRON_ENABLED', true),
+  },
 });

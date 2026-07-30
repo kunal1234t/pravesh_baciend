@@ -28,6 +28,7 @@ module.exports = {
                 return ctx.badRequest('User already exists');
             }
 
+            // Auto-bind device if provided during registration
             const user = await strapi.entityService.create(
                 'plugin::users-permissions.user',
                 {
@@ -39,12 +40,15 @@ module.exports = {
                         confirmed: true,
                         role,
                         phone_number,
-                        deviceID,
+                        deviceID: deviceID || null, // Auto-bind device on registration
                     },
                 }
             );
 
             console.log('✅ USER CREATED:', user);
+            if (deviceID) {
+                console.log('✅ Device auto-bound during registration:', deviceID);
+            }
 
             const sanitizedUser = await sanitize.contentAPI.output(
                 user,

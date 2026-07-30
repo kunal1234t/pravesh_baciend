@@ -78,8 +78,8 @@ module.exports = {
           exitRequest.id,
           {
             data: {
-              status: 'EXITED',
-              exited_at: new Date(),
+              statuse: 'EXITED',
+              consumedAt: new Date().toISOString(),
             },
             transaction: trx,
           }

@@ -22,5 +22,13 @@ module.exports = {
         },
       },
     },
+    {
+      method: 'GET',
+      path: '/exit-requests/latest', // ✅ New route for fetching latest request
+      handler: 'exit-request.latest',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };

@@ -30,6 +30,13 @@
       "type": "datetime",
       "required": true
     },
+    "validUntil": {
+      "type": "datetime"
+    },
+    "adminOverride": {
+      "type": "boolean",
+      "default": false
+    },
     "reason": {
       "type": "text",
       "required": true,
@@ -53,6 +60,12 @@
     },
     "approvedAt": {
       "type": "datetime"
+    },
+    "qrToken": {
+      "type": "string",
+      "required": false,
+      "minLength": 12,
+      "maxLength": 12
     },
     "rejectionReason": {
       "type": "text"

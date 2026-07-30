@@ -45,6 +45,12 @@
     },
     "scannerId": {
       "type": "string"
+    },
+    "qr_tokens": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::qr-token.qr-token",
+      "mappedBy": "exit_requests"
     }
   }
 }

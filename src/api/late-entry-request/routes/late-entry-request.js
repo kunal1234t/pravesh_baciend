@@ -16,6 +16,12 @@ module.exports = {
     },
     {
       method: 'GET',
+      path: '/late-entry/history',
+      handler: 'late-entry-request.history',
+      config: { auth: false },
+    },
+    {
+      method: 'GET',
       path: '/late-entry/warden/pending',
       handler: 'late-entry-request.wardenPending',
       config: { auth: false },

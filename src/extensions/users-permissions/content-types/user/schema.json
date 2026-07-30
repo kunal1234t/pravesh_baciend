@@ -15,7 +15,6 @@
     "username": {
       "type": "string",
       "minLength": 3,
-      "unique": true,
       "required": true,
       "configurable": false
     },
@@ -76,6 +75,7 @@
     },
     "deviceID": {
       "type": "string",
+      "unique": true,
       "configurable": false
     }
   }

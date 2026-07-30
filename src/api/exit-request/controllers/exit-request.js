@@ -1,49 +1,53 @@
 'use strict';
 
 const crypto = require('crypto');
+const base62 = require('../../qr-token/base62');
+const redisClient = require('../../redis-client');
+const nightCompliance = require('../../night-compliance');
 
 module.exports = {
-  // Warden: list all EXITED exit-requests (students currently outside)
+  // Staff (Warden/Guard): list all EXITED exit-requests (students currently outside)
   async listExited(ctx) {
     try {
-      // Manually verify JWT since route uses auth: false
-      const authHeader = ctx.request.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return ctx.unauthorized('No token provided');
-      }
-
-      const token = authHeader.replace('Bearer ', '');
-      const jwtService = strapi.plugin('users-permissions').service('jwt');
-      let payload;
-      try {
-        payload = await jwtService.verify(token);
-      } catch (e) {
+      const fullUser = await nightCompliance.verifyUserFromAuthHeader(
+        ctx.request.headers.authorization
+      );
+      if (!fullUser) {
         return ctx.unauthorized('Invalid or expired token');
       }
-
-      const fullUser = await strapi.entityService.findOne(
-        'plugin::users-permissions.user',
-        payload.id,
-        { populate: ['role'] }
-      );
-
-      if (!fullUser || fullUser.role.name !== 'Warden') {
-        return ctx.forbidden('Only wardens can view this list');
+      if (!nightCompliance.isStaffRole(fullUser?.role?.name)) {
+        return ctx.forbidden('Only wardens and guards can view this list');
       }
 
-      const exitedRequests = await strapi.entityService.findMany(
-        'api::exit-request.exit-request',
-        {
-          filters: { statuse: 'EXITED' },
-          populate: ['student'],
-          sort: { createdAt: 'desc' },
-        }
-      );
+      const classified = await nightCompliance.fetchOutsideStudentsWithClassification();
 
-      return ctx.send({ data: exitedRequests });
+      return ctx.send({
+        data: classified.students,
+        summary: classified.summary,
+      });
     } catch (err) {
       console.error('❌ listExited ERROR:', err);
       return ctx.internalServerError('Failed to fetch exited students');
+    }
+  },
+
+  async outsideSummary(ctx) {
+    try {
+      const fullUser = await nightCompliance.verifyUserFromAuthHeader(
+        ctx.request.headers.authorization
+      );
+      if (!fullUser) {
+        return ctx.unauthorized('Invalid or expired token');
+      }
+      if (!nightCompliance.isStaffRole(fullUser?.role?.name)) {
+        return ctx.forbidden('Only wardens and guards can view this summary');
+      }
+
+      const classified = await nightCompliance.fetchOutsideStudentsWithClassification();
+      return ctx.send(classified.summary);
+    } catch (err) {
+      console.error('❌ outsideSummary ERROR:', err);
+      return ctx.internalServerError('Failed to fetch outside summary');
     }
   },
 
@@ -54,9 +58,6 @@ module.exports = {
       const { user } = ctx.state;
       const { reason } = ctx.request.body;
 
-      console.log("USER:", user);
-      console.log("BODY:", ctx.request.body);
-
       if (!user) {
         return ctx.unauthorized('Authentication required');
       }
@@ -65,84 +66,144 @@ module.exports = {
         return ctx.badRequest('Reason is required');
       }
 
-      // Fetch full user with role
+      // ── Rate Limit: 5 exit QR requests per student per minute ──
+      const rlAllowed = await redisClient.checkRateLimit(`rl:exit:${user.id}`, 5, 60);
+      if (!rlAllowed) {
+        console.warn(`🚇 Rate limit hit on exit QR for user ${user.id}`);
+        return ctx.tooManyRequests('Too many requests. Please wait before generating another QR.');
+      }
+
+      // ── Input Validation: Prevent large payload abuse ──
+      if (typeof reason !== 'string' || reason.length > 500) {
+        return ctx.badRequest('Reason must be a string under 500 characters');
+      }
+
+      // 1. Verify User Role
       const fullUser = await strapi.entityService.findOne(
         'plugin::users-permissions.user',
         user.id,
         { populate: ['role'] }
       );
 
-      console.log("ROLE:", fullUser?.role?.name);
-
       if (!fullUser || fullUser.role.name !== 'Student') {
         return ctx.forbidden('Only students can create exit requests');
       }
 
-      // Check active exit
-      const activeExit = await strapi.db
-        .query('api::exit-request.exit-request')
-        .findOne({
-          where: {
-            student: user.id,
-            statuse: { $in: ['PENDING', 'EXITED'] },
-          },
-        });
+      // Check if current time is within restricted hours (10 PM - 5 AM IST)
+      const now = new Date();
+      const istHour = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
+      const hour = parseInt(istHour, 10);
 
-      if (activeExit) {
-        return ctx.badRequest('You already have an active exit request');
+      if (hour >= 22 || hour < 5) {
+        console.log(`⚠️ Exit blocked during night hours (${hour}:00 IST).`);
+        return ctx.forbidden('Gate is locked. Exit requests are not permitted between 10 PM and 5 AM.');
       }
 
-      // Generate token
-      const rawToken = crypto.randomBytes(32).toString('hex');
-      const tokenHash = crypto
-        .createHash('sha256')
-        .update(rawToken)
-        .digest('hex');
+      // 2. ⚡ OPTIMIZED: Check only latest record for active exit (O(1) with index)
+      console.log(`🔍 Checking for existing exit requests for student ${user.id}...`);
 
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+      const latestRequest = await strapi.entityService.findMany(
+        'api::exit-request.exit-request',
+        {
+          filters: { student: user.id },
+          sort: { createdAt: 'desc' },
+          limit: 1,
+        }
+      );
 
-      // ✅ CREATE EXIT REQUEST (match schema)
+      if (latestRequest && latestRequest.length > 0) {
+        const latest = latestRequest[0];
+
+        // Case 1: Latest is PENDING and NOT expired → Block (already active)
+        if (latest.statuse === 'PENDING' && new Date(latest.expiresAt) > now) {
+          return ctx.badRequest('You already have a valid pending QR code. Scan it at the gate.');
+        }
+
+        // Case 2: Latest is APPROVED → Block (already approved to exit)
+        if (latest.statuse === 'APPROVED') {
+          return ctx.badRequest('You already have an approved exit request. Please use the existing QR code at the gate.');
+        }
+
+        // Case 3: Latest is EXITED but NOT ENTERED yet → Block (student still outside)
+        if (latest.statuse === 'EXITED') {
+          return ctx.badRequest('You are already marked as OUTSIDE. Please generate an Entry QR first.');
+        }
+      }
+
+      // 3. Generate Security Token (Base62)
+      const qrToken = base62.generateToken();
+      console.log(`✅ Generated Exit QR Token successfully`);
+
+      const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2-minute window
+
+      // 4. Create Exit Request
       const exitRequest = await strapi.entityService.create(
         'api::exit-request.exit-request',
         {
           data: {
             student: user.id,
-            reasonType: reason,   // REQUIRED FIELD
+            reasonType: reason,
             statuse: 'PENDING',
-            expiresAt: expiresAt, // REQUIRED FIELD
+            expiresAt: expiresAt,
           },
         }
       );
 
       console.log("✅ EXIT REQUEST CREATED:", exitRequest.id);
 
-      // ✅ CREATE QR TOKEN (match schema)
-      const qrToken = await strapi.entityService.create('api::qr-token.qr-token', {
+      // 5. Create and link QR Token with hash
+      const tokenHash = crypto.createHash('sha256').update(qrToken).digest('hex');
+
+      await strapi.entityService.create('api::qr-token.qr-token', {
         data: {
+          token: qrToken,
           hash: tokenHash,
           expires_at: expiresAt,
           consumed: false,
-          exit_requests: [exitRequest.id], // 👈 THIS is why yours was empty
+          exit_requests: exitRequest.id,
         },
       });
 
+      // 6. ── ATOMIC: Write QR token to Redis for race-condition-safe validation ──
+      const ttlSeconds = Math.ceil((expiresAt.getTime() - Date.now()) / 1000);
 
-      console.log("✅ QR TOKEN CREATED:", qrToken.id);
+      const stored = await redisClient.storeQrToken(qrToken, {
+        exitRequestId: exitRequest.id,
+        studentId: user.id,
+        statuse: 'PENDING',
+        expiresAt: expiresAt.toISOString(),
+      }, ttlSeconds);
 
+      if (stored) {
+        console.log(`✅ QR token written to Redis with ${ttlSeconds}s TTL`);
+      } else {
+        console.warn('⚠️ Redis write failed — DB-only validation will be used');
+      }
+
+      // 7. Set Redis TTL key for exit request auto-rejection
+      const expirySet = await redisClient.setExitExpiry(exitRequest.id, ttlSeconds);
+      if (expirySet) {
+        console.log(`⏱️ Redis TTL Set: Exit Request ${exitRequest.id} will auto-reject in ${ttlSeconds}s`);
+      } else {
+        console.warn(`⚠️ Redis TTL not set for ${exitRequest.id}: Cron job will handle cleanup`);
+      }
+
+      // 8. Success Response
       return {
         exitRequestId: exitRequest.id,
-        qr: {
-          t: rawToken,
-          e: Math.floor(expiresAt.getTime() / 1000),
-        },
+        qr: qrToken,
+        expiresAt: expiresAt.toISOString(),
       };
 
     } catch (err) {
       console.error("❌ EXIT REQUEST ERROR:", err);
-      return ctx.internalServerError('Exit request creation failed');
+      return ctx.internalServerError(`Exit request creation failed: ${err.message}`);
     }
   },
 
+  /**
+   * @param {import('koa').ParameterizedContext} ctx
+   */
   async createEntry(ctx) {
     try {
       console.log("🔥 CREATE ENTRY QR API HIT");
@@ -152,61 +213,211 @@ module.exports = {
         return ctx.unauthorized('Authentication required');
       }
 
-      // Check for active "OUT" status (APPROVED or EXITED)
-      // We look for the most recent one that hasn't been returned yet
-      console.log(`🔍 Searching for active exit for user ${user.id}...`);
+      // ── Rate Limit: 5 entry QR requests per student per minute ──
+      const rlAllowed = await redisClient.checkRateLimit(`rl:entry:${user.id}`, 5, 60);
+      if (!rlAllowed) {
+        console.warn(`🚇 Rate limit hit on entry QR for user ${user.id}`);
+        return ctx.tooManyRequests('Too many requests. Please wait before generating another QR.');
+      }
 
+      const now = new Date();
+      const isNightWindow = nightCompliance.isNightWindow();
+
+      // Check for active "OUT" status (APPROVED or EXITED)
+      // ⚡ limit:1 prevents full-table scan even with 1000s of historical records
       const activeExit = await strapi.db
         .query('api::exit-request.exit-request')
         .findOne({
           where: {
             student: user.id,
-            status: { $in: ['APPROVED', 'EXITED'] },
+            statuse: { $in: ['APPROVED', 'EXITED'] },
           },
-          orderBy: { createdAt: 'desc' }, // Get the latest
+          orderBy: { createdAt: 'desc' },
+          limit: 1,
         });
 
       if (!activeExit) {
-        console.warn(`⚠️ No active exit found for user ${user.id}. Cannot create entry QR.`);
         return ctx.badRequest('No active exit found. You must exit first to generate an entry QR.');
       }
 
-      console.log(`✅ Found active exit: ${activeExit.id} (Status: ${activeExit.status})`);
+      console.log(`✅ Found active exit: ${activeExit.id} (Status: ${activeExit.statuse})`);
 
-      // Check if already returned? The status check above handles it (RETURNED is not in list)
+      if (isNightWindow) {
+        const lateEntry = await strapi.db
+          .query('api::late-entry-request.late-entry-request')
+          .findOne({
+            where: {
+              users_permissions_user: user.id,
+              stat: 'approved',
+            },
+            orderBy: { createdAt: 'desc' },
+          });
 
-      // Generate token
-      const rawToken = crypto.randomBytes(32).toString('hex');
-      const tokenHash = crypto
-        .createHash('sha256')
-        .update(rawToken)
-        .digest('hex');
+        if (!lateEntry) {
+          return ctx.forbidden('Late night approval required to enter the campus.');
+        }
 
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+        const validUntil = lateEntry.validUntil
+          ? new Date(lateEntry.validUntil)
+          : lateEntry.expectedreturntime
+            ? new Date(new Date(lateEntry.expectedreturntime).getTime() + 60 * 60 * 1000)
+            : null;
+        const adminOverride = lateEntry.adminOverride === true;
+        if (!adminOverride && (!validUntil || now > validUntil)) {
+          return ctx.forbidden('Late night approval has expired.');
+        }
+      }
+
+      // Generate token (Base62)
+      const qrToken = base62.generateToken();
+      console.log(`✅ Generated Entry QR Token successfully`);
+
+      const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
 
       // Create QR Token linked to the SAME exit request
-      const qrToken = await strapi.entityService.create('api::qr-token.qr-token', {
+      await strapi.entityService.create('api::qr-token.qr-token', {
         data: {
-          hash: tokenHash,
+          token: qrToken,
           expires_at: expiresAt,
           consumed: false,
           exit_requests: [activeExit.id],
         },
       });
 
+      // ── ATOMIC: Write QR token to Redis for race-condition-safe validation ──
+      const ttlSeconds = Math.ceil((expiresAt.getTime() - Date.now()) / 1000);
+
+      const stored = await redisClient.storeQrToken(qrToken, {
+        exitRequestId: activeExit.id,
+        studentId: user.id,
+        statuse: activeExit.statuse, // 'EXITED' → will become ENTERED
+        expiresAt: expiresAt.toISOString(),
+      }, ttlSeconds);
+
+      if (stored) {
+        console.log(`✅ Entry QR token written to Redis with ${ttlSeconds}s TTL`);
+      }
+
       console.log("✅ ENTRY QR TOKEN CREATED for Exit Request:", activeExit.id);
 
       return {
         exitRequestId: activeExit.id,
-        qr: {
-          t: rawToken,
-          e: Math.floor(expiresAt.getTime() / 1000),
-        },
+        qr: qrToken,
       };
 
     } catch (err) {
       console.error("❌ CREATE ENTRY ERROR:", err);
       return ctx.internalServerError('Entry QR creation failed');
+    }
+  },
+
+  /**
+   * Fetches the latest exit request for the authenticated user.
+   * If the request is still PENDING and valid, generates a NEW QR token for it.
+   * ⚡ OPTIMIZED: Uses indexed query for O(1) lookup
+   * @param {import('koa').ParameterizedContext} ctx
+   */
+  async latest(ctx) {
+    try {
+      console.log("🔍 LATEST EXIT REQUEST API HIT");
+      const authUser =
+        ctx.state.user ||
+        (await nightCompliance.verifyUserFromAuthHeader(
+          ctx.request.headers.authorization
+        ));
+
+      if (!authUser) {
+        return ctx.unauthorized('Authentication required');
+      }
+
+      // ── IDOR Protection: Only query the authenticated user's own data ──
+      // ctx.state.user is set by Strapi's auth middleware from the JWT,
+      // so this is already scoped. No req.params.studentId to abuse.
+
+      const latestRequest = await strapi.db.query('api::exit-request.exit-request')
+        .findOne({
+          select: ['id', 'statuse', 'expiresAt', 'createdAt', 'reasonType'],
+          where: { student: authUser.id },
+          orderBy: { createdAt: 'DESC' },
+        });
+
+      if (!latestRequest) {
+        return ctx.notFound('No exit request found');
+      }
+
+      const now = new Date();
+      const expiry = new Date(latestRequest.expiresAt);
+      let qrData = null;
+
+      // Logic for PENDING requests
+      if (latestRequest.statuse === 'PENDING') {
+        if (now > expiry) {
+          // ⏰ EXPIRED: Mark REJECTED and immediately clean up the linked QR token row
+          const updated = await strapi.entityService.update('api::exit-request.exit-request', latestRequest.id, {
+            data: { statuse: 'REJECTED' }
+          });
+
+          // ── Fix #4: Inline QR token cleanup on expiry detection ──
+          // Delete the expired token row immediately so it never bloats qr_tokens table
+          try {
+            await strapi.db.query('api::qr-token.qr-token').deleteMany({
+              where: {
+                exit_requests: latestRequest.id,
+                consumed: false,
+              },
+            });
+            console.log(`🗑️  Cleaned up expired QR tokens for exit request ${latestRequest.id}`);
+          } catch (cleanupErr) {
+            // Non-critical — cron job will catch it later
+            console.warn(`⚠️ Inline QR cleanup failed for ${latestRequest.id}:`, cleanupErr.message);
+          }
+
+          return {
+            id: updated.id,
+            reason: updated.reasonType,
+            statuse: 'REJECTED',
+            expiresAt: updated.expiresAt,
+            qr: null,
+          };
+        } else {
+          // ✅ STILL VALID: Generate a new token so the student can scan
+          const qrToken = base62.generateToken();
+
+          await strapi.entityService.create('api::qr-token.qr-token', {
+            data: {
+              token: qrToken,
+              expires_at: latestRequest.expiresAt,
+              consumed: false,
+              exit_requests: [latestRequest.id],
+            },
+          });
+
+          // Also write to Redis for atomic validation
+          const ttlSeconds = Math.ceil((expiry.getTime() - Date.now()) / 1000);
+          await redisClient.storeQrToken(qrToken, {
+            exitRequestId: latestRequest.id,
+            studentId: user.id,
+            statuse: 'PENDING',
+            expiresAt: latestRequest.expiresAt,
+          }, ttlSeconds);
+
+          qrData = qrToken;
+        }
+      }
+
+      // Build response matching Flutter's expected format
+      return {
+        id: latestRequest.id,
+        reason: latestRequest.reasonType,
+        statuse: latestRequest.statuse,
+        expiresAt: latestRequest.expiresAt,
+        createdAt: latestRequest.createdAt,
+        qr: qrData,
+      };
+
+    } catch (err) {
+      console.error("❌ LATEST REQUEST ERROR:", err);
+      return ctx.internalServerError('Failed to fetch latest request');
     }
   },
 };

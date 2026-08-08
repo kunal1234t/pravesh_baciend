@@ -1,0 +1,8 @@
+services:
+  strapi:
+    build: .
+
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.cache

@@ -1,62 +1,81 @@
+version: "3.9"
+
 services:
   strapi:
-    build: .
+    image: kunal1234t/pravesh-backend:latest
     container_name: pravesh-backend
     restart: unless-stopped
+
     env_file:
       - .env
+
     environment:
-      # This tells Node.js it can use 1GB of RAM specifically for its heap
       - NODE_OPTIONS=--max-old-space-size=1024
+
     ports:
       - "6969:6969"
-    deploy:
-      resources:
-        limits:
-          memory: 2G  # Reduced from 3G
+
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - .:/app
-      - /app/node_modules # Keeps node_modules inside the container
-      - /app/.cache      # Prevents cache from being written back to your slow Windows disk
+
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 
   redis:
     image: redis:alpine
     container_name: pravesh-redis
     restart: unless-stopped
+
+    command:
+      - redis-server
+      - --notify-keyspace-events
+      - Ex
+      - --requirepass
+      - ${REDIS_PASSWORD:-Pr@vesh_R3dis_2026}
+
     deploy:
       resources:
         limits:
           memory: 512M
-    command: ["redis-server", "--notify-keyspace-events", "Ex", "--requirepass", "${REDIS_PASSWORD:-Pr@vesh_R3dis_2026}"]
+
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-Pr@vesh_R3dis_2026}", "PING"]
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "-a",
+          "${REDIS_PASSWORD:-Pr@vesh_R3dis_2026}",
+          "PING"
+        ]
       interval: 10s
       timeout: 3s
       retries: 5
-    # SECURITY: No ports mapped — Redis only accessible within Docker network
-    # ports:
-    #   - "6379:6379"
 
   db:
     image: mysql:8.0
     container_name: pravesh-mysql
     restart: unless-stopped
+
     environment:
       MYSQL_ROOT_PASSWORD: iiitnBX248
       MYSQL_DATABASE: pravesh
+
+    ports:
+      - "3307:3306"
+
     deploy:
       resources:
         limits:
-          memory: 1G # MySQL is hungry; we limit it here
-    ports:
-      - "3307:3306"
+          memory: 1G
+
     volumes:
       - mysql_data:/var/lib/mysql
+
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 5s

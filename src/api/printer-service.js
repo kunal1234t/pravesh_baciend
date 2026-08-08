@@ -8,7 +8,7 @@ const axios = require('axios');
  */
 class PrinterService {
   constructor() {
-    this.printerUrl = process.env.PRINTER_URL || 'http://192.168.33.246:5001';
+    this.printerUrl = process.env.PRINTER_URL || 'http://192.168.32.115:5001';
     this.timeout = parseInt(process.env.PRINTER_TIMEOUT || 5000);
     this.retryAttempts = parseInt(process.env.PRINTER_RETRY || 2);
     this.retryDelay = parseInt(process.env.PRINTER_RETRY_DELAY || 1000);

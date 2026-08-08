@@ -39,9 +39,16 @@ module.exports = (plugin) => {
     // 2. Auto-bind deviceID if not bound yet
     else if (deviceID) {
       // Check if this device is ALREADY bound to ANY other account
-      const existingDeviceUser = await strapi.db.query('plugin::users-permissions.user').findOne({
-        where: { deviceID },
-      });
+      console.log("Incoming deviceID:", deviceID);
+
+const existingDeviceUser = await strapi.db
+  .query("plugin::users-permissions.user")
+  .findOne({
+    where: { deviceID },
+  });
+
+console.log("existingDeviceUser =", existingDeviceUser);
+console.log("Current user =", fullUser.id);
 
       if (existingDeviceUser && existingDeviceUser.id !== fullUser.id) {
         console.log('❌ Login blocked: device already bound to another user:', deviceID);

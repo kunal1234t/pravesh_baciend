@@ -10,5 +10,13 @@ module.exports = {
         auth: false, // hardware does not use JWT
       },
     },
+    {
+      method: 'POST',
+      path: '/qr-token/force-status',
+      handler: 'qr-token.forceStatus',
+      config: {
+        auth: false, // hardware does not use JWT
+      },
+    },
   ],
 };

@@ -360,7 +360,7 @@ module.exports = {
       // ── Gate API Key Authentication ──
       const gateApiKey = ctx.request.headers['x-gate-api-key'];
       const expectedKey = process.env.GATE_API_KEY;
-      if (expectedKey && gateApiKey !== expectedKey) {
+      if (!expectedKey || gateApiKey !== expectedKey) {
         console.warn('🚨 SECURITY: Guard override called without valid gate API key');
         return ctx.unauthorized('Invalid gate credentials');
       }

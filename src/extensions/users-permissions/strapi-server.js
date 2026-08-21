@@ -3,6 +3,10 @@
 module.exports = (plugin) => {
   console.log('🔥 USERS-PERMISSIONS OVERRIDE LOADED (Strapi v5)');
 
+  // Temporary operational switch. Device binding is disabled unless this is
+  // explicitly set to "true" in the backend environment.
+  const deviceBindingEnabled = process.env.DEVICE_BINDING_ENABLED === 'true';
+
   const originalCallback = plugin.controllers.auth.callback;
 
   plugin.controllers.auth.callback = async (ctx) => {
@@ -27,8 +31,11 @@ module.exports = (plugin) => {
     const fullUser = await strapi.entityService.findOne('plugin::users-permissions.user', user.id);
     if (!fullUser) return;
 
+    if (!deviceBindingEnabled) {
+      console.log('⚠️ Device binding is temporarily disabled.');
+    }
     // 1. Enforce deviceID check even if missing from request (if bound in DB)
-    if (fullUser.deviceID) {
+    else if (fullUser.deviceID) {
       if (!deviceID || fullUser.deviceID !== deviceID) {
         console.log('❌ Login blocked: different device');
         ctx.status = 403;
@@ -76,4 +83,3 @@ console.log("Current user =", fullUser.id);
 
   return plugin;
 };
-

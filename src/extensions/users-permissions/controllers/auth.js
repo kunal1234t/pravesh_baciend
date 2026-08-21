@@ -2,6 +2,8 @@
 
 const { sanitize } = require('@strapi/utils');
 
+const deviceBindingEnabled = process.env.DEVICE_BINDING_ENABLED === 'true';
+
 module.exports = {
     async callback(ctx) {
         if (ctx.request.path !== '/api/auth/local/register') {
@@ -40,13 +42,13 @@ module.exports = {
                         confirmed: true,
                         role,
                         phone_number,
-                        deviceID: deviceID || null, // Auto-bind device on registration
+                        deviceID: deviceBindingEnabled ? (deviceID || null) : null,
                     },
                 }
             );
 
             console.log('✅ USER CREATED:', user);
-            if (deviceID) {
+            if (deviceBindingEnabled && deviceID) {
                 console.log('✅ Device auto-bound during registration:', deviceID);
             }
 

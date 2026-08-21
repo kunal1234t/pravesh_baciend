@@ -1,13 +1,15 @@
 'use strict';
 
+const deviceBindingEnabled = process.env.DEVICE_BINDING_ENABLED === 'true';
+
 module.exports = {
     async register(ctx) {
         console.log('🔥 CUSTOM REGISTER API HIT');
 
         const { username, email, password, phone_number, deviceID } = ctx.request.body;
 
-        if (!username || !email || !password || !deviceID) {
-            return ctx.badRequest('username, email, password and deviceID are required');
+        if (!username || !email || !password || (deviceBindingEnabled && !deviceID)) {
+            return ctx.badRequest('username, email and password are required');
         }
 
         // ── SECURITY: Email domain validation ──
@@ -41,9 +43,11 @@ module.exports = {
             }
 
             // --- Enforce Device Uniqueness ---
-            const existingDeviceUser = await strapi.db
-                .query('plugin::users-permissions.user')
-                .findOne({ where: { deviceID } });
+            const existingDeviceUser = deviceBindingEnabled
+                ? await strapi.db
+                    .query('plugin::users-permissions.user')
+                    .findOne({ where: { deviceID } })
+                : null;
 
             if (existingDeviceUser) {
                 console.log('❌ Registration blocked: device already bound to another user:', deviceID);
@@ -61,7 +65,7 @@ module.exports = {
                         confirmed: true,
                         role: STUDENT_ROLE_ID, // HARDCODED: Self-registration = Student only
                         phone_number,
-                        deviceID,
+                        deviceID: deviceBindingEnabled ? deviceID : null,
                     },
                 }
             );

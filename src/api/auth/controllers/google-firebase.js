@@ -3,6 +3,10 @@
 const admin = require('firebase-admin');
 const redisClient = require('../../redis-client');
 
+// Temporary operational switch. Device binding is disabled unless this is
+// explicitly set to "true" in the backend environment.
+const deviceBindingEnabled = process.env.DEVICE_BINDING_ENABLED === 'true';
+
 module.exports = {
   async login(ctx) {
     try {
@@ -53,7 +57,7 @@ module.exports = {
         const roleId = studentRole ? studentRole.id : 2;
 
         // --- 0. Prevent registering a new user with an already-bound device ---
-        if (deviceID) {
+        if (deviceBindingEnabled && deviceID) {
           const existingDeviceUser = await strapi.db.query('plugin::users-permissions.user').findOne({
             where: { deviceID },
           });
@@ -75,7 +79,7 @@ module.exports = {
             confirmed: true,
             blocked: false,
             role: roleId,
-            deviceID: deviceID || null, // Auto-bind device if provided
+            deviceID: deviceBindingEnabled ? (deviceID || null) : null,
           },
           populate: ['role'],
         });
@@ -84,7 +88,7 @@ module.exports = {
         console.log('✅ New user created via Firebase with email:', email);
       } else {
         // --- 1. Enforce deviceID check even if missing from request ---
-        if (user.deviceID) {
+        if (deviceBindingEnabled && user.deviceID) {
           if (!deviceID || user.deviceID !== deviceID) {
             console.log('❌ Login blocked: different device for user:', email);
             return ctx.forbidden('User already logged in on another device');
@@ -92,7 +96,7 @@ module.exports = {
         } 
         
         // --- 2. Auto-bind logic (+ Prevent multiple accounts on 1 device) ---
-        else if (deviceID) {
+        else if (deviceBindingEnabled && deviceID) {
           // Check if this device is ALREADY bound to ANY other account
           const existingDeviceUser = await strapi.db.query('plugin::users-permissions.user').findOne({
             where: { deviceID },

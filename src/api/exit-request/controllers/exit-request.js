@@ -396,7 +396,7 @@ module.exports = {
           const ttlSeconds = Math.ceil((expiry.getTime() - Date.now()) / 1000);
           await redisClient.storeQrToken(qrToken, {
             exitRequestId: latestRequest.id,
-            studentId: user.id,
+            studentId: authUser.id,
             statuse: 'PENDING',
             expiresAt: latestRequest.expiresAt,
           }, ttlSeconds);

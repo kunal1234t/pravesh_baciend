@@ -4,8 +4,10 @@ module.exports = {
     routes: [
         {
             method: 'POST',
-            path: '/exit-requests/entry-qr', // Updated path to distinguish from previous attempts
-            handler: 'api::exit-request.entry-qr.createEntryQR', // Reference the new controller file with GLOBAL ID
+            // Compatibility alias for clients using the original entry-QR endpoint.
+            // Both entry endpoints must use the Redis-backed createEntry handler.
+            path: '/exit-requests/entry-qr',
+            handler: 'exit-request.createEntry',
             config: {
                 auth: {
                     strategies: ['users-permissions'],

@@ -223,14 +223,14 @@ module.exports = {
       const now = new Date();
       const isNightWindow = nightCompliance.isNightWindow();
 
-      // Check for active "OUT" status (APPROVED or EXITED)
+      // An entry QR is valid only after the exit QR has been consumed.
       // ⚡ limit:1 prevents full-table scan even with 1000s of historical records
       const activeExit = await strapi.db
         .query('api::exit-request.exit-request')
         .findOne({
           where: {
             student: user.id,
-            statuse: { $in: ['APPROVED', 'EXITED'] },
+            statuse: 'EXITED',
           },
           orderBy: { createdAt: 'desc' },
           limit: 1,
@@ -299,6 +299,18 @@ module.exports = {
       }
 
       console.log("✅ ENTRY QR TOKEN CREATED for Exit Request:", activeExit.id);
+
+      // Preserve the response shape expected by clients using the legacy
+      // /exit-requests/entry-qr alias while sharing this Redis-backed flow.
+      if (ctx.path.endsWith('/exit-requests/entry-qr')) {
+        return {
+          exitRequestId: activeExit.id,
+          qr: {
+            t: qrToken,
+            e: expiresAt.toISOString(),
+          },
+        };
+      }
 
       return {
         exitRequestId: activeExit.id,

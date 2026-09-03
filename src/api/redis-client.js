@@ -1,5 +1,7 @@
 'use strict';
 
+const { metrics } = require('./metrics');
+
 /**
  * Shared Redis Client (Singleton)
  * 
@@ -30,10 +32,12 @@ function getClient() {
     });
 
     _client.on('ready', () => {
+      metrics.redisClientConnected.set(1);
       console.log('✅ Shared Redis client connected');
     });
 
     _client.on('error', (err) => {
+      metrics.redisClientConnected.set(0);
       // Suppress noisy connection errors in logs
       if (err.code !== 'ECONNREFUSED') {
         console.warn('⚠️ Redis client error:', err.message);
@@ -41,11 +45,13 @@ function getClient() {
     });
 
     _client.on('reconnecting', () => {
+      metrics.redisClientConnected.set(0);
       console.log('🔄 Shared Redis client reconnecting');
     });
 
     return _client;
   } catch (err) {
+    metrics.redisClientConnected.set(0);
     console.warn('⚠️ Redis client creation failed:', err.message);
     return null;
   }
@@ -59,7 +65,10 @@ function getClient() {
  */
 async function storeQrToken(token, data, ttlSeconds) {
   const client = getClient();
-  if (!client) return false;
+  if (!client) {
+    metrics.qrRedisOperationsTotal.inc({ operation: 'set', result: 'error' });
+    return false;
+  }
 
   try {
     await client.set(
@@ -68,8 +77,10 @@ async function storeQrToken(token, data, ttlSeconds) {
       'EX',
       ttlSeconds
     );
+    metrics.qrRedisOperationsTotal.inc({ operation: 'set', result: 'success' });
     return true;
   } catch (err) {
+    metrics.qrRedisOperationsTotal.inc({ operation: 'set', result: 'error' });
     console.warn(`⚠️ Redis storeQrToken failed: ${err.message}`);
     return false;
   }
@@ -84,7 +95,10 @@ async function storeQrToken(token, data, ttlSeconds) {
  */
 async function burnQrToken(token) {
   const client = getClient();
-  if (!client) return null;
+  if (!client) {
+    metrics.qrRedisOperationsTotal.inc({ operation: 'burn', result: 'error' });
+    return null;
+  }
 
   try {
     // MULTI ensures atomicity: if two guards scan simultaneously,
@@ -96,12 +110,16 @@ async function burnQrToken(token) {
 
     // results = [[null, 'data_string'], [null, 1]]
     // results[0][1] = GET result, results[1][1] = DEL result (count)
-    if (!results || results.length < 2) return null;
+    if (!results || results.length < 2) {
+      metrics.qrRedisOperationsTotal.inc({ operation: 'burn', result: 'error' });
+      return null;
+    }
 
     const [getErr, tokenData] = results[0];
     const [delErr, delCount] = results[1];
 
     if (getErr || delErr) {
+      metrics.qrRedisOperationsTotal.inc({ operation: 'burn', result: 'error' });
       console.error('❌ Redis MULTI error:', getErr || delErr);
       return null;
     }
@@ -109,11 +127,15 @@ async function burnQrToken(token) {
     // If tokenData is null → token didn't exist (expired or never stored)
     // If delCount is 0 → another scanner already deleted it (race lost)
     if (!tokenData || delCount === 0) {
+      metrics.qrRedisOperationsTotal.inc({ operation: 'burn', result: 'miss' });
       return null;
     }
 
-    return JSON.parse(tokenData);
+    const parsedToken = JSON.parse(tokenData);
+    metrics.qrRedisOperationsTotal.inc({ operation: 'burn', result: 'hit' });
+    return parsedToken;
   } catch (err) {
+    metrics.qrRedisOperationsTotal.inc({ operation: 'burn', result: 'error' });
     console.warn(`⚠️ Redis burnQrToken failed: ${err.message}`);
     return null;
   }

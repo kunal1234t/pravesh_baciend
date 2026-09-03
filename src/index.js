@@ -3,6 +3,7 @@
 const { Server } = require('socket.io');
 const cron = require('node-cron');
 const nightCompliance = require('./api/night-compliance');
+require('./api/metrics');
 
 module.exports = {
   /**

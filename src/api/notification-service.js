@@ -1,6 +1,23 @@
 'use strict';
 
 const admin = require('firebase-admin');
+const { metrics } = require('./metrics');
+
+function classifyFcmFailure(error) {
+  const code = String(error?.code || '').toLowerCase();
+  const message = String(error?.message || '').toLowerCase();
+
+  if (code.includes('registration-token') || code.includes('messaging/invalid') || message.includes('registration token')) {
+    return 'invalid_token';
+  }
+  if (code.includes('credential') || message.includes('oauth') || message.includes('access token') || message.includes('invalid_grant')) {
+    return 'oauth';
+  }
+  if (code.includes('econn') || code.includes('enotfound') || code.includes('timeout') || message.includes('network')) {
+    return 'network';
+  }
+  return 'other';
+}
 
 /**
  * Notification Service - Handles Firebase Cloud Messaging (FCM) push notifications
@@ -64,6 +81,8 @@ class NotificationService {
    */
   async sendPushNotification(fcmToken, title, body, data = {}) {
     if (!this.initialized || !admin.apps.length) {
+      metrics.fcmNotificationsTotal.inc({ result: 'skipped' });
+      metrics.fcmFailuresTotal.inc({ reason: 'not_initialized' });
       console.warn('⚠️ Firebase not initialized - FCM skipped');
       return null;
     }
@@ -100,9 +119,12 @@ class NotificationService {
       };
 
       const messageId = await admin.messaging().send(message);
+      metrics.fcmNotificationsTotal.inc({ result: 'success' });
       console.log(`✅ Push notification sent. Message ID: ${messageId}`);
       return messageId;
     } catch (err) {
+      metrics.fcmNotificationsTotal.inc({ result: 'error' });
+      metrics.fcmFailuresTotal.inc({ reason: classifyFcmFailure(err) });
       console.error(`❌ Failed to send push notification: ${err.message}`);
       throw err;
     }

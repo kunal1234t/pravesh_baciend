@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const base62 = require('../base62');
 const redisClient = require('../../redis-client');
+const { metrics } = require('../../metrics');
 const nightCompliance = require('../../night-compliance');
 
 const resolveValidUntil = (lateEntry) => {
@@ -230,6 +231,7 @@ module.exports = {
 
       // ── FALLBACK: Redis unavailable or token not in Redis ──
       // Fall back to database-based validation (original logic)
+      metrics.qrRedisFallbackTotal.inc();
       console.log('⚠️ Redis miss, falling back to database validation for token:', token);
 
       const qrToken = await strapi.entityService.findMany(

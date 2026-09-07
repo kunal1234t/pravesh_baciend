@@ -355,4 +355,114 @@ module.exports = {
       return ctx.internalServerError('QR validation failed');
     }
   },
+  async forceStatus(ctx) {
+    try {
+      console.log('🔥 GUARD OVERRIDE API HIT');
+
+      // ── Gate API Key Authentication ──
+      const gateApiKey = ctx.request.headers['x-gate-api-key'];
+      const expectedKey = process.env.GATE_API_KEY;
+      if (!expectedKey || gateApiKey !== expectedKey) {
+        console.warn('🚨 SECURITY: Guard override called without valid gate API key');
+        return ctx.unauthorized('Invalid gate credentials');
+      }
+
+      const { btid, action } = ctx.request.body;
+      if (!btid || !action) {
+        return ctx.badRequest('btid and action are required');
+      }
+
+      if (action !== 'entry' && action !== 'exit') {
+        return ctx.badRequest('action must be either "entry" or "exit"');
+      }
+
+      // 1. Find the student
+      const users = await strapi.db.query('plugin::users-permissions.user').findMany({
+        where: { email: btid },
+        limit: 1
+      });
+
+      if (users.length === 0) {
+        return ctx.notFound(`Student with BTID ${btid} not found`);
+      }
+      const student = users[0];
+
+      // 2. Enforce Night Entry Rules if it is an Entry
+      if (action === 'entry') {
+        const nightCheck = await enforceNightEntryRules(student.id);
+        if (!nightCheck.allowed) {
+           return ctx.forbidden(nightCheck.reason);
+        }
+        await markLateEntryEntered(student.id);
+      }
+
+      // 3. Update or Create Exit Request
+      let exitReason = 'Guard Manual Override';
+      
+      if (action === 'exit') {
+        // Just create a new EXITED request
+        await strapi.entityService.create('api::exit-request.exit-request', {
+          data: {
+            student: student.id,
+            statuse: 'EXITED',
+            reasonType: exitReason,
+            consumedAt: new Date().toISOString()
+          }
+        });
+      } else {
+        // Entry: Try to find an active EXITED request
+        const activeExit = await strapi.db.query('api::exit-request.exit-request').findOne({
+          where: { student: student.id, statuse: 'EXITED' },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        if (activeExit) {
+          exitReason = activeExit.reasonType;
+          await strapi.entityService.update('api::exit-request.exit-request', activeExit.id, {
+            data: {
+              statuse: 'ENTERED',
+              entryTime: new Date().toISOString()
+            }
+          });
+        } else {
+           // Sneaking in? Just create a forced ENTERED request
+           await strapi.entityService.create('api::exit-request.exit-request', {
+            data: {
+              student: student.id,
+              statuse: 'ENTERED',
+              reasonType: 'Guard Forced Entry',
+              entryTime: new Date().toISOString()
+            }
+          });
+        }
+      }
+
+      // Emit event for frontend
+      if (strapi.io) {
+        strapi.io?.to(`user:${student.id}`).emit('qr-validated', {
+          qrToken: 'manual_override',
+          allowed: true,
+          action: action,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Notify night compliance engine
+      await nightCompliance.emitOutsideStudentStatusUpdated(student.id);
+
+      return {
+        allowed: true,
+        action: action,
+        BTID: student.email,
+        name: student.username,
+        reason: exitReason,
+        is_out: action === 'exit',
+        timestamp: new Date().toISOString(),
+      };
+
+    } catch (err) {
+      console.error('❌ GUARD OVERRIDE ERROR:', err);
+      return ctx.internalServerError('Guard override failed');
+    }
+  },
 };

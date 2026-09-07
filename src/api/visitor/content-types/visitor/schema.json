@@ -20,6 +20,11 @@
     "purpose": {
       "type": "text"
     },
+    "entryType": {
+      "type": "enumeration",
+      "enum": ["visitor", "delivery"],
+      "default": "visitor"
+    },
     "photo": {
       "type": "media",
       "multiple": true,

@@ -63,18 +63,24 @@ module.exports = {
       if (!user) return ctx.unauthorized('Invalid token');
       if (!isRole(user, 'Guard')) return ctx.forbidden('Only guards can create visitors');
 
-      const { name, phone, purpose, assignedToId, photoId } = ctx.request.body;
+      const { name, phone, purpose, assignedToId, photoId, entryType = 'visitor' } = ctx.request.body;
       if (!name || !phone || !purpose || !assignedToId) {
         return ctx.badRequest('name, phone, purpose and assignedToId are required');
       }
+      if (!['visitor', 'delivery'].includes(entryType)) {
+        return ctx.badRequest('entryType must be visitor or delivery');
+      }
+      const isDelivery = entryType === 'delivery';
 
       const visitor = await strapi.entityService.create('api::visitor.visitor', {
         data: {
           name,
           phone: String(phone),
           purpose,
-          stat: 'pending',
-          isInside: false,
+          entryType,
+          stat: isDelivery ? 'checked_in' : 'pending',
+          isInside: isDelivery,
+          ...(isDelivery ? { checkedInAt: new Date() } : {}),
           guard: user.id,
           users_permissions_user: assignedToId,
           ...(photoId ? { photo: [photoId] } : {}),
@@ -82,8 +88,8 @@ module.exports = {
         populate: ['photo'],
       });
 
-      // Send notifications (Socket.IO + FCM)
-      try {
+      // Deliveries skip the approval queue and related notifications.
+      if (!isDelivery) try {
         await notifyVisitorRequest(assignedToId, {
           visitorId: visitor.id,
           visitorName: name,
@@ -255,11 +261,13 @@ module.exports = {
         },
       });
 
-      await triggerVisitorPassPrint({
-        visitor: { ...visitor, guard: { username: user.username } },
-        approverName: user.username,
-        requestId: visitor.documentId ?? visitor.id,
-      });
+      if (visitor.entryType !== 'delivery') {
+        await triggerVisitorPassPrint({
+          visitor: { ...visitor, guard: { username: user.username } },
+          approverName: user.username,
+          requestId: visitor.documentId ?? visitor.id,
+        });
+      }
 
       return ctx.send(updated);
     } catch (err) {
@@ -388,6 +396,9 @@ module.exports = {
         populate: ['users_permissions_user', 'guard', 'photo'],
       });
       if (!visitor) return ctx.notFound('Visitor not found');
+      if (visitor.entryType === 'delivery') {
+        return ctx.badRequest('Deliveries are admitted directly and cannot be approved');
+      }
 
       const updated = await strapi.entityService.update('api::visitor.visitor', id, {
         data: {
@@ -438,6 +449,9 @@ module.exports = {
         populate: ['users_permissions_user', 'guard', 'photo'],
       });
       if (!visitor) return ctx.notFound('Visitor not found');
+      if (visitor.entryType === 'delivery') {
+        return ctx.badRequest('Deliveries are admitted directly and cannot be approved');
+      }
       if (visitor.users_permissions_user?.id !== user.id) return ctx.forbidden('Not assigned to you');
 
       const updated = await strapi.entityService.update('api::visitor.visitor', id, {

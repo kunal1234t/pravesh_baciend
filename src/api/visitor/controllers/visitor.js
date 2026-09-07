@@ -63,26 +63,45 @@ module.exports = {
       if (!user) return ctx.unauthorized('Invalid token');
       if (!isRole(user, 'Guard')) return ctx.forbidden('Only guards can create visitors');
 
-      const { name, phone, purpose, assignedToId, photoId, entryType = 'visitor' } = ctx.request.body;
-      if (!name || !phone || !purpose || !assignedToId) {
-        return ctx.badRequest('name, phone, purpose and assignedToId are required');
-      }
-      if (!['visitor', 'delivery'].includes(entryType)) {
+      const {
+        name,
+        phone,
+        purpose,
+        assignedToId,
+        photoId,
+        entryType,
+        type,
+        delivery,
+        deliveryDestination,
+      } = ctx.request.body;
+      const isDelivery = entryType === 'delivery' ||
+        type === 'delivery' ||
+        delivery === true ||
+        typeof deliveryDestination === 'string';
+      const normalizedEntryType = isDelivery ? 'delivery' : (entryType || 'visitor');
+      if (!['visitor', 'delivery'].includes(normalizedEntryType)) {
         return ctx.badRequest('entryType must be visitor or delivery');
       }
-      const isDelivery = entryType === 'delivery';
+      if (!name || !phone || !purpose ||
+          (!isDelivery && !assignedToId) ||
+          (isDelivery && !['hostel', 'academic', 'admin', 'residential'].includes(deliveryDestination))) {
+        return ctx.badRequest(isDelivery
+          ? 'name, phone, purpose and a valid deliveryDestination are required'
+          : 'name, phone, purpose and assignedToId are required');
+      }
 
       const visitor = await strapi.entityService.create('api::visitor.visitor', {
         data: {
           name,
           phone: String(phone),
           purpose,
-          entryType,
+          entryType: normalizedEntryType,
+          ...(isDelivery ? { deliveryDestination } : {}),
           stat: isDelivery ? 'checked_in' : 'pending',
           isInside: isDelivery,
           ...(isDelivery ? { checkedInAt: new Date() } : {}),
           guard: user.id,
-          users_permissions_user: assignedToId,
+          ...(!isDelivery ? { users_permissions_user: assignedToId } : {}),
           ...(photoId ? { photo: [photoId] } : {}),
         },
         populate: ['photo'],

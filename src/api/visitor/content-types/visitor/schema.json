@@ -25,6 +25,10 @@
       "enum": ["visitor", "delivery"],
       "default": "visitor"
     },
+    "deliveryDestination": {
+      "type": "enumeration",
+      "enum": ["hostel", "academic", "admin", "residential"]
+    },
     "photo": {
       "type": "media",
       "multiple": true,

@@ -76,7 +76,11 @@ module.exports = {
       // Hardware scanners must include this header to prevent unauthorized API calls
       const gateApiKey = ctx.request.headers['x-gate-api-key'];
       const expectedKey = process.env.GATE_API_KEY;
-      if (expectedKey && gateApiKey !== expectedKey) {
+      if (!expectedKey) {
+        strapi.log.error('GATE_API_KEY is not configured; refusing hardware QR validation');
+        return ctx.internalServerError('Gate hardware is not configured');
+      }
+      if (gateApiKey !== expectedKey) {
         console.warn('🚨 SECURITY: QR validate called without valid gate API key');
         return ctx.unauthorized('Invalid gate credentials');
       }

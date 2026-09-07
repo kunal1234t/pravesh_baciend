@@ -94,7 +94,10 @@ module.exports = {
       const istHour = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
       const hour = parseInt(istHour, 10);
 
-      if (hour >= 22 || hour < 5) {
+      // Local testing only: production remains locked unless this environment
+      // variable is deliberately enabled.
+      const allowNightQrTesting = process.env.ALLOW_NIGHT_QR_TESTING === 'true';
+      if (!allowNightQrTesting && (hour >= 22 || hour < 5)) {
         console.log(`⚠️ Exit blocked during night hours (${hour}:00 IST).`);
         return ctx.forbidden('Gate is locked. Exit requests are not permitted between 10 PM and 5 AM.');
       }
